@@ -149,6 +149,9 @@ public class Recommend {
             Float[] NewScore = new Float[MAX_ITEMS];
             Arrays.fill(NewScore, (float) 0);
             for (int i = 0; i < MAX_ITEMS; ++i) {
+                if(Float.parseFloat(Tokens[i]) > 0.0) {
+                    continue;
+                }
                 for (int j = 0; j < MAX_ITEMS; ++j) {
                     NewScore[i] += COMatrix.get(i)[j] * Float.parseFloat(Tokens[j]);
                 }
@@ -174,7 +177,9 @@ public class Recommend {
             }
 
             for (int i = 0; i < newScore.length; i++) {
-                context.write(key, new Text(i + "," + newScore[i]));
+                if (Float.parseFloat(newScore[i]) > 0.0) {
+                    context.write(key, new Text(i+1 + "," + newScore[i]));
+                }
             }
         }
     }
