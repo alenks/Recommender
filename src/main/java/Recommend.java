@@ -14,6 +14,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 public class Recommend {
     public static Integer MAX_ITEMS = 0;
     public static Map<Integer, Integer[]> COMatrix = new HashMap<>();
+    //public static Map<Integer, Integer[]> ItemPr = new HashMap<>();
     public static class TokenizerMapper
             extends Mapper<Object, Text, Text, IntWritable>{
 
@@ -52,6 +53,7 @@ public class Recommend {
             for (int i = 0; i < MAX_ITEMS; ++i) {
                 TempResult += arr[i].toString() + ",";
             }
+            //ItemPr.put(Integer.parseInt(key.toString()), arr);
             result.set(TempResult);
             context.write(key, result);
         }
@@ -147,11 +149,13 @@ public class Recommend {
             userId.set((value.toString()).split("\t")[0]);
             String[] Tokens = ((value.toString()).split("\t"))[1].split(",");
             Float[] NewScore = new Float[MAX_ITEMS];
-            Arrays.fill(NewScore, (float) 0);
+            Arrays.fill(NewScore, (float) 0.0);
+            //Integer[] tempArr = ItemPr.get(Integer.parseInt(userId.toString()));
             for (int i = 0; i < MAX_ITEMS; ++i) {
-                if(Float.parseFloat(Tokens[i]) > 0.0) {
+                //if((Float.parseFloat(Tokens[i]) > 0.0) || tempArr[i] == 1) {
+                /*if(tempArr[i] == 1) {
                     continue;
-                }
+                }*/
                 for (int j = 0; j < MAX_ITEMS; ++j) {
                     NewScore[i] += COMatrix.get(i)[j] * Float.parseFloat(Tokens[j]);
                 }
@@ -175,11 +179,46 @@ public class Recommend {
             for (Text val : values) {
                 newScore = val.toString().split(",");
             }
-
+            //Integer[] tempArr = ItemPr.get(Integer.parseInt(key.toString()));
             for (int i = 0; i < newScore.length; i++) {
-                if (Float.parseFloat(newScore[i]) > 0.0) {
+                //if ((Float.parseFloat(newScore[i]) > 0.0) && tempArr[i] == 0) {
+                //if (tempArr[i] == 0) {
                     context.write(key, new Text(i+1 + "," + newScore[i]));
-                }
+                //}
+            }
+        }
+    }
+
+    public static class FilterMapper
+            extends Mapper<Object, Text, Text, Text>{
+        private String userId = new String();
+        public void map(Object key, Text value, Context context
+        ) throws IOException, InterruptedException {
+            String[] Tokens = (value.toString()).split("[,\t]");
+            userId = Tokens[0];
+            String item = Tokens[1];
+            String score = Tokens[2];
+            context.write(new Text(userId + "," + item), new Text(score));
+        }
+    }
+
+
+    public static class FilterReducer
+            extends Reducer<Text,Text,Text,Text> {
+        Text result = new Text();
+        public void reduce(Text key, Iterable<Text> values,
+                           Context context
+        ) throws IOException, InterruptedException {
+            int ctr = 0;
+            String _score = null;
+            String _key = key.toString().split(",")[0];
+            String _item = key.toString().split(",")[1];
+            for (Text val : values) {
+                ++ctr;
+                _score = val.toString();
+            }
+            if (ctr == 1) {
+                context.write(new Text(_key), new Text(_item + "," + _score));
             }
         }
     }
@@ -241,7 +280,21 @@ public class Recommend {
         job4.setMapOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job4, new Path(output3));
         FileOutputFormat.setOutputPath(job4, new Path(output4));
+        job4.waitForCompletion(true);
 
-        System.exit(job4.waitForCompletion(true) ? 0 : 1);
+        Configuration conf4 = new Configuration();
+        Job job5 = Job.getInstance(conf4, "recommender system");
+        job5.setJarByClass(Recommend.class);
+        job5.setMapperClass(FilterMapper.class);
+        job5.setReducerClass(FilterReducer.class);
+        job5.setOutputKeyClass(Text.class);
+        job5.setOutputValueClass(Text.class);
+        job5.setMapOutputKeyClass(Text.class);
+        job5.setMapOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(job5, new Path(output4));
+        FileInputFormat.addInputPath(job5, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job5, new Path(args[1]));
+
+        System.exit(job5.waitForCompletion(true) ? 0 : 1);
     }
 }
