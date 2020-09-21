@@ -152,12 +152,7 @@ public class Recommend {
             String[] Tokens = ((value.toString()).split("\t"))[1].split(",");
             Float[] NewScore = new Float[MAX_ITEMS];
             Arrays.fill(NewScore, (float) 0.0);
-            //Integer[] tempArr = ItemPr.get(Integer.parseInt(userId.toString()));
             for (int i = 0; i < MAX_ITEMS; ++i) {
-                //if((Float.parseFloat(Tokens[i]) > 0.0) || tempArr[i] == 1) {
-                /*if(tempArr[i] == 1) {
-                    continue;
-                }*/
                 for (int j = 0; j < MAX_ITEMS; ++j) {
                     NewScore[i] += COMatrix.get(i)[j] * Float.parseFloat(Tokens[j]);
                 }
@@ -181,12 +176,8 @@ public class Recommend {
             for (Text val : values) {
                 newScore = val.toString().split(",");
             }
-            //Integer[] tempArr = ItemPr.get(Integer.parseInt(key.toString()));
             for (int i = 0; i < newScore.length; i++) {
-                //if ((Float.parseFloat(newScore[i]) > 0.0) && tempArr[i] == 0) {
-                //if (tempArr[i] == 0) {
-                    context.write(key, new Text(i+1 + "," + newScore[i]));
-                //}
+                context.write(key, new Text(i+1 + "," + newScore[i]));
             }
         }
     }
@@ -227,13 +218,6 @@ public class Recommend {
 
     public static class SortMapper
             extends Mapper<Object, Text, Text, Text>{
-        /*private TreeMap<Float, String> tmap;
-        @Override
-        public void setup(Context context) throws IOException,
-                InterruptedException
-        {
-            tmap = new TreeMap<Float, String>();
-        }*/
         private String userId = "";
         public void map(Object key, Text value, Context context
         ) throws IOException, InterruptedException {
@@ -244,31 +228,12 @@ public class Recommend {
             context.write(new Text(userId), new Text(item + "," + score));
             //tmap.put((-1 * score), userId + "," + item);
         }
-        /*    @Override
-            public void cleanup(Context context) throws IOException,
-                    InterruptedException
-            {
-                for (Map.Entry<Float, String> entry : tmap.entrySet()) {
-                    Float _score = entry.getKey();
-                    String _idItem = entry.getValue();
-                    String _id = _idItem.split(",")[0];
-                    String _item = _idItem.split(",")[1];
-                    context.write(new Text(_id), new Text(_item + "," + _score));
-                }
-        }*/
     }
 
 
     public static class SortReducer
             extends Reducer<Text,Text,Text,Text> {
-        /*private TreeMap<Float, String> tmap2;
-        @Override
-        public void setup(Context context) throws IOException,
-                InterruptedException
-        {
-            tmap2 = new TreeMap<Float, String>();
-        }*/
-        public LinkedHashMap<String, Float> sortHashMapByValues(
+        public LinkedHashMap<String, Float> sortHashMapByValues2(
                 HashMap<String, Float> passedMap) {
             List<String> mapKeys = new ArrayList<>(passedMap.keySet());
             List<Float> mapValues = new ArrayList<>(passedMap.values());
@@ -297,7 +262,28 @@ public class Recommend {
             }
             return sortedMap;
         }
+        public static HashMap<String, Float> sortHashMapByValues(HashMap<String, Float> hm)
+        {
+            List<Map.Entry<String, Float> > list =
+                    new LinkedList<Map.Entry<String, Float> >(hm.entrySet());
 
+            Collections.sort(list, new Comparator<Map.Entry<String, Float> >() {
+                public int compare(Map.Entry<String, Float> o1,
+                                   Map.Entry<String, Float> o2)
+                {
+                    if (!o1.getValue().equals(o2.getValue())) {
+                        return (o1.getValue()).compareTo(o2.getValue());
+                    }
+                    return (o1.getKey()).compareTo(o2.getKey());
+                }
+            });
+
+            HashMap<String, Float> temp = new LinkedHashMap<String, Float>();
+            for (Map.Entry<String, Float> aa : list) {
+                temp.put(aa.getKey(), aa.getValue());
+            }
+            return temp;
+        }
 
         public void reduce(Text key, Iterable<Text> values,
                            Context context
@@ -311,24 +297,30 @@ public class Recommend {
                 score = Float.parseFloat(val.toString().split(",")[1]);
                 tmap2.put(item, -1*score);
             }
-
+            TreeMap<Float, ArrayList<Integer>> map3 = new TreeMap<>();
             for (Map.Entry<String, Float> entry : sortHashMapByValues(tmap2).entrySet()) {
                 Float _score = entry.getValue();
-                String _item = entry.getKey();
-                context.write(key, new Text(_item + "," + -1*_score));
+                Integer _item = Integer.parseInt(entry.getKey());
+
+                if (map3.containsKey(_score)) {
+                    ArrayList<Integer> arlist = map3.get(_score);
+                    arlist.add(_item);
+                    map3.put(_score, arlist);
+                } else {
+                    ArrayList<Integer> arlist = new ArrayList<Integer>(Collections.singleton(_item));
+                    map3.put(_score, arlist);
+                }
+                //context.write(key, new Text(_item + "," + -1*_score));
+            }
+            for (Map.Entry<Float, ArrayList<Integer>> entry : map3.entrySet()) {
+                Float _score = entry.getKey();
+                ArrayList<Integer> _item = entry.getValue();
+                _item.sort(Collections.reverseOrder());
+                for (Integer ctr : _item) {
+                    context.write(key, new Text(ctr + "," + -1*_score));
+                }
             }
         }
-        /*@Override
-        public void cleanup(Context context) throws IOException,
-                InterruptedException
-        {
-            for (Map.Entry<Float, String> entry : tmap2.entrySet())
-            {
-                Float _score = entry.getKey();
-                String _item = entry.getValue();
-                context.write(resK, new Text(_item + "," + -1*_score));
-            }
-        }*/
     }
 
 
