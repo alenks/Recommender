@@ -1,5 +1,7 @@
 import java.io.IOException;
+import java.security.KeyStore;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -223,12 +225,119 @@ public class Recommend {
         }
     }
 
+    public static class SortMapper
+            extends Mapper<Object, Text, Text, Text>{
+        /*private TreeMap<Float, String> tmap;
+        @Override
+        public void setup(Context context) throws IOException,
+                InterruptedException
+        {
+            tmap = new TreeMap<Float, String>();
+        }*/
+        private String userId = "";
+        public void map(Object key, Text value, Context context
+        ) throws IOException, InterruptedException {
+            String[] Tokens = (value.toString()).split("[,\t]");
+            userId = Tokens[0];
+            String item = Tokens[1];
+            String score = Tokens[2];
+            context.write(new Text(userId), new Text(item + "," + score));
+            //tmap.put((-1 * score), userId + "," + item);
+        }
+        /*    @Override
+            public void cleanup(Context context) throws IOException,
+                    InterruptedException
+            {
+                for (Map.Entry<Float, String> entry : tmap.entrySet()) {
+                    Float _score = entry.getKey();
+                    String _idItem = entry.getValue();
+                    String _id = _idItem.split(",")[0];
+                    String _item = _idItem.split(",")[1];
+                    context.write(new Text(_id), new Text(_item + "," + _score));
+                }
+        }*/
+    }
+
+
+    public static class SortReducer
+            extends Reducer<Text,Text,Text,Text> {
+        /*private TreeMap<Float, String> tmap2;
+        @Override
+        public void setup(Context context) throws IOException,
+                InterruptedException
+        {
+            tmap2 = new TreeMap<Float, String>();
+        }*/
+        public LinkedHashMap<String, Float> sortHashMapByValues(
+                HashMap<String, Float> passedMap) {
+            List<String> mapKeys = new ArrayList<>(passedMap.keySet());
+            List<Float> mapValues = new ArrayList<>(passedMap.values());
+            Collections.sort(mapValues);
+            Collections.sort(mapKeys);
+
+            LinkedHashMap<String, Float> sortedMap =
+                    new LinkedHashMap<>();
+
+            Iterator<Float> valueIt = mapValues.iterator();
+            while (valueIt.hasNext()) {
+                Float val = valueIt.next();
+                Iterator<String> keyIt = mapKeys.iterator();
+
+                while (keyIt.hasNext()) {
+                    String key = keyIt.next();
+                    Float comp1 = passedMap.get(key);
+                    Float comp2 = val;
+
+                    if (comp1.equals(comp2)) {
+                        keyIt.remove();
+                        sortedMap.put(key, val);
+                        break;
+                    }
+                }
+            }
+            return sortedMap;
+        }
+
+
+        public void reduce(Text key, Iterable<Text> values,
+                           Context context
+        ) throws IOException, InterruptedException {
+            Float score = (float) 0;
+            String item = null;
+
+            HashMap<String,Float> tmap2 = new HashMap<>();
+            for (Text val : values) {
+                item = val.toString().split(",")[0];
+                score = Float.parseFloat(val.toString().split(",")[1]);
+                tmap2.put(item, -1*score);
+            }
+
+            for (Map.Entry<String, Float> entry : sortHashMapByValues(tmap2).entrySet()) {
+                Float _score = entry.getValue();
+                String _item = entry.getKey();
+                context.write(key, new Text(_item + "," + -1*_score));
+            }
+        }
+        /*@Override
+        public void cleanup(Context context) throws IOException,
+                InterruptedException
+        {
+            for (Map.Entry<Float, String> entry : tmap2.entrySet())
+            {
+                Float _score = entry.getKey();
+                String _item = entry.getValue();
+                context.write(resK, new Text(_item + "," + -1*_score));
+            }
+        }*/
+    }
+
 
     public static void main(String[] args) throws Exception {
         String output1= "tmp-output1";
         String output2 = "tmp-output2";
         String output3 = "tmp-output3";
         String output4 = "tmp-output4";
+        String output5 = "tmp-output5";
 
         Configuration conf = new Configuration();
         Job job1 = Job.getInstance(conf, "recommender system");
@@ -293,8 +402,21 @@ public class Recommend {
         job5.setMapOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job5, new Path(output4));
         FileInputFormat.addInputPath(job5, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job5, new Path(args[1]));
+        FileOutputFormat.setOutputPath(job5, new Path(output5));
+        job5.waitForCompletion(true);
 
-        System.exit(job5.waitForCompletion(true) ? 0 : 1);
+        Configuration conf5 = new Configuration();
+        Job job6 = Job.getInstance(conf5, "recommender system");
+        job6.setJarByClass(Recommend.class);
+        job6.setMapperClass(SortMapper.class);
+        job6.setReducerClass(SortReducer.class);
+        job6.setOutputKeyClass(Text.class);
+        job6.setOutputValueClass(Text.class);
+        job6.setMapOutputKeyClass(Text.class);
+        job6.setMapOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(job6, new Path(output5));
+        FileOutputFormat.setOutputPath(job6, new Path(args[1]));
+
+        System.exit(job6.waitForCompletion(true) ? 0 : 1);
     }
 }
